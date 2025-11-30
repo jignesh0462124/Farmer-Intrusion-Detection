@@ -3,6 +3,7 @@ Tests for Farmer Intrusion Detection System.
 """
 
 import unittest
+import time
 import numpy as np
 import sys
 import os
@@ -130,7 +131,7 @@ class TestIntrusionDetector(unittest.TestCase):
         self.assertTrue(detector._can_alert())
 
         # After triggering, should be blocked
-        detector._last_alert_time = __import__('time').time()
+        detector._last_alert_time = time.time()
         self.assertFalse(detector._can_alert())
 
     def test_process_frame(self):

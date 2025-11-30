@@ -6,6 +6,7 @@ on farms using video input from cameras.
 """
 
 import cv2
+import numpy as np
 import time
 from typing import Callable, Optional, List, Tuple
 
@@ -60,8 +61,8 @@ class IntrusionDetector:
             print(f"[ALERT] Intrusion detected! {len(regions)} region(s) identified.")
 
     def process_frame(
-        self, frame
-    ) -> Tuple[bool, List[Tuple[int, int, int, int]]]:
+        self, frame: np.ndarray
+    ) -> Tuple[bool, np.ndarray, List[Tuple[int, int, int, int]]]:
         """
         Process a single frame for intrusion detection.
 
