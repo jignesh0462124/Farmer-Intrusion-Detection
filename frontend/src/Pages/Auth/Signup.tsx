@@ -2,6 +2,11 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
+// ✅ Shared Supabase client
+// If supabase.ts is in src/supabase/supabase.ts:
+import { supabase } from "../../supabase/supabase";
+// If your structure is different, adjust the path accordingly.
+
 type View = "signup" | "login" | "reset";
 
 const Signup: React.FC = () => {
@@ -24,6 +29,7 @@ const Signup: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const resetMessages = () => {
     setError(null);
@@ -35,7 +41,31 @@ const Signup: React.FC = () => {
     setView(next);
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  // 👉 Google OAuth login / signup
+  const handleGoogleAuth = async () => {
+    resetMessages();
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (error) throw error;
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Something went wrong with Google sign-in.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 👉 Email + password signup
+  const handleSignupSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     resetMessages();
 
@@ -52,12 +82,44 @@ const Signup: React.FC = () => {
       return;
     }
 
-    // TODO: connect to your signup API / Supabase.
-    console.log("Signup:", { signupName, signupEmail, signupPassword });
-    setSuccess("Account created successfully.");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+        options: {
+          data: {
+            full_name: signupName,
+          },
+          // Optional: confirmation / reset handler URL
+          emailRedirectTo: `${window.location.origin}/reset-password`,
+        },
+      });
+
+      if (error) throw error;
+
+      // ✅ After signup: show a message, then switch to Login view
+      setSuccess("Account created successfully. Please log in.");
+      // Prefill login email with the signup email
+      setLoginEmail(signupEmail);
+      // Clear sensitive fields
+      setSignupPassword("");
+      setAcceptTerms(false);
+      // Switch to login view
+      setView("login");
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to create account.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // 👉 Email + password login
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     resetMessages();
 
@@ -66,12 +128,32 @@ const Signup: React.FC = () => {
       return;
     }
 
-    // TODO: connect to your login API.
-    console.log("Login:", { loginEmail, loginPassword });
-    setSuccess("Logged in successfully.");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      });
+
+      if (error) throw error;
+
+      setSuccess("Logged in successfully.");
+      // TODO: use useNavigate() from react-router-dom to redirect
+      // const navigate = useNavigate();
+      // navigate("/dashboard");
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to log in.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResetSubmit = (e: React.FormEvent) => {
+  // 👉 Send reset password email
+  const handleResetSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     resetMessages();
 
@@ -80,9 +162,24 @@ const Signup: React.FC = () => {
       return;
     }
 
-    // TODO: connect to your reset-password API.
-    console.log("Reset password:", { resetEmail });
-    setSuccess("Password reset link sent to your email.");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      setSuccess("Password reset link sent to your email.");
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to send reset link.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const showGoogleButton = view === "signup" || view === "login";
@@ -106,7 +203,9 @@ const Signup: React.FC = () => {
             <>
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                onClick={handleGoogleAuth}
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-white">
                   <span className="text-lg leading-none text-sky-500">G</span>
@@ -156,7 +255,7 @@ const Signup: React.FC = () => {
             </div>
           )}
 
-          {/* Forms */}
+          {/* Signup form */}
           {view === "signup" && (
             <form onSubmit={handleSignupSubmit} className="space-y-4">
               {/* Full Name */}
@@ -273,13 +372,15 @@ const Signup: React.FC = () => {
               {/* Submit */}
               <button
                 type="submit"
-                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"
+                disabled={loading}
+                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Create Account
+                {loading ? "Processing..." : "Create Account"}
               </button>
             </form>
           )}
 
+          {/* Login form */}
           {view === "login" && (
             <form onSubmit={handleLoginSubmit} className="mt-2 space-y-4">
               {/* Email */}
@@ -355,13 +456,15 @@ const Signup: React.FC = () => {
               {/* Submit */}
               <button
                 type="submit"
-                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"
+                disabled={loading}
+                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Login
+                {loading ? "Processing..." : "Login"}
               </button>
             </form>
           )}
 
+          {/* Reset form */}
           {view === "reset" && (
             <form onSubmit={handleResetSubmit} className="mt-4 space-y-4">
               <p className="text-xs text-slate-600">
@@ -400,9 +503,10 @@ const Signup: React.FC = () => {
 
               <button
                 type="submit"
-                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"
+                disabled={loading}
+                className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Send Reset Link
+                {loading ? "Sending..." : "Send Reset Link"}
               </button>
             </form>
           )}
